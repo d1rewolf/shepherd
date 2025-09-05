@@ -1,5 +1,17 @@
 # shepherd.py
 
+```
+      .-.
+     (@o@)
+    /|   |\
+   // \_/ \\
+  //   |   \\
+  \\   |   //
+   \\_/ \_//
+    ||| |||
+    ^^^ ^^^
+```
+
 A smart URL router that guides your web links to the right browser profile - like a shepherd tending different flocks. Because sometimes you need your work emails in one profile and cat videos in another.
 
 DISCLAIMER: shepherd.py has been vibe-coded by an experienced programmer, but most of the code is written by claude code. Make of that what you will.
@@ -63,6 +75,36 @@ update-desktop-database ~/.local/share/applications/
 xdg-settings set default-web-browser shepherd.desktop
 ```
 
+### Omarchy Integration
+
+If you're using [Omarchy](https://github.com/d1rewolf/omarchy), you'll need an additional step to make shepherd.py work with `omarchy-launch-webapp`. 
+
+**The Problem:** Omarchy's `omarchy-launch-webapp` script checks for known browsers, and when it doesn't recognize `shepherd.desktop`, it falls back to `chromium.desktop`. This would bypass shepherd.py entirely.
+
+**The Solution:** Create a local chromium.desktop etc with an override that points to shepherd.py:
+
+```bash
+# Create a local override of chromium.desktop
+cp /usr/share/applications/chromium.desktop ~/.local/share/applications/
+
+# Edit the Exec line to point to shepherd.py
+sed -i 's|^Exec=/usr/bin/chromium %U|Exec=/path/to/shepherd.py %U|' ~/.local/share/applications/chromium.desktop
+
+# Also update the other Exec lines for new-window and incognito actions
+sed -i 's|^Exec=/usr/bin/chromium$|Exec=/path/to/shepherd.py|' ~/.local/share/applications/chromium.desktop
+sed -i 's|^Exec=/usr/bin/chromium --incognito|Exec=/path/to/shepherd.py --incognito|' ~/.local/share/applications/chromium.desktop
+
+# Update desktop database
+update-desktop-database ~/.local/share/applications/
+```
+
+This way:
+1. Regular desktop clicks use `shepherd.desktop` → routes through shepherd.py
+2. Omarchy falls back to `chromium.desktop` → finds your override → still routes through shepherd.py
+3. No need to modify omarchy-launch-webapp itself
+
+**Note:** This override only affects desktop/GUI launches. Command-line `chromium` commands will still use `/usr/bin/chromium` directly.
+
 ## Configuration
 
 Shepherd.py stores its configuration in `~/.config/shepherd/config.py`. On first run, it will create an example configuration file for you.
@@ -102,11 +144,14 @@ BROWSER_RULES = {
 
 # Default browser for unmatched URLs
 DEFAULT_BROWSER = "/usr/bin/chromium"
+
+# Or with a default profile:
+# DEFAULT_BROWSER = ("/usr/bin/chromium", "Personal")
 ```
 
 ### Rule Format
 
-Rules can be either:
+Both rules and DEFAULT_BROWSER can be either:
 - **Simple string**: Just the browser path
 - **Tuple**: `(browser_path, profile_name)` for profile-specific routing
 

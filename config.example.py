@@ -25,5 +25,5 @@ BROWSER_RULES = {
 # Default browser for unmatched URLs
 DEFAULT_BROWSER = "/usr/bin/chromium"
 
-# Optional: Set default profile for the default browser
-# DEFAULT_BROWSER = ("/usr/bin/chromium", "Default")
+# Or with a specific profile for unmatched URLs:
+# DEFAULT_BROWSER = ("/usr/bin/chromium", "Personal")
