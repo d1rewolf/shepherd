@@ -82,7 +82,7 @@ If you're using [Omarchy](https://github.com/d1rewolf/omarchy), you'll need an a
 
 **The Problem:** Omarchy's `omarchy-launch-webapp` script checks for known browsers, and when it doesn't recognize `shepherd.desktop`, it falls back to `chromium.desktop`. This would bypass shepherd.py entirely.
 
-**The Solution:** Create a local chromium.desktop etc with an override that points to shepherd.py:
+**The Solution:** Create a local chromium.desktop (or brave.desktop, or vivaldi.desktop...) with an override that points to shepherd.py:
 
 ```bash
 # Create a local override of chromium.desktop

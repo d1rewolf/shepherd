@@ -140,15 +140,14 @@ def chromium_profile_lookup(profile_name=""):
         return ""
 
 
-def open_with_browser(browser, url, chromium_profile=None, app_mode=False, extra_args=None):
+def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
     """
-    Launch the browser with the given URL.
+    Launch the browser with the given URL or --app=URL argument.
     
     Args:
         browser: Path to the browser executable
-        url: URL to open
+        url_arg: URL or --app=URL to open
         chromium_profile: Optional profile name for Chromium-based browsers
-        app_mode: Whether to open in app mode (for Chromium-based browsers)
         extra_args: Additional arguments to pass to the browser
     """
     try:
@@ -173,11 +172,8 @@ def open_with_browser(browser, url, chromium_profile=None, app_mode=False, extra
         if extra_args:
             cmd.extend(extra_args)
         
-        # Add app mode if requested and browser supports it
-        if app_mode and is_chromium_based:
-            cmd.append(f'--app={url}')
-        else:
-            cmd.append(url)
+        # Add the URL or --app=URL argument
+        cmd.append(url_arg)
         
         print(f"Running command: {' '.join(cmd)}", file=sys.stderr)
         subprocess.Popen(cmd)
@@ -185,7 +181,7 @@ def open_with_browser(browser, url, chromium_profile=None, app_mode=False, extra
         error_msg = f"Error: Browser not found: {browser}"
         print(f"{error_msg}", file=sys.stderr)
         send_notification(error_msg)
-        subprocess.Popen([DEFAULT_BROWSER, url])
+        subprocess.Popen([DEFAULT_BROWSER, url_arg])
 
 
 def main():
@@ -193,17 +189,19 @@ def main():
         print("Usage: shepherd.py <url> [extra args...]", file=sys.stderr)
         sys.exit(1)
 
-    url = sys.argv[1]
-    app_mode = False
+    first_arg = sys.argv[1]
     extra_args = sys.argv[2:] if len(sys.argv) > 2 else []
     
-    # Handle --app=URL format from omarchy-launch-webapp
-    if url.startswith("--app="):
-        url = url[6:]  # Remove "--app=" prefix
-        app_mode = True
+    # Extract URL for pattern matching, but keep original argument
+    if first_arg.startswith("--app="):
+        url = first_arg[6:]  # Extract URL for matching
+        url_arg = first_arg  # Keep original --app=URL to pass through
+    else:
+        url = first_arg
+        url_arg = first_arg
     
     # Debug logging
-    print(f"Processing URL: {url} (app_mode: {app_mode}, extra_args: {extra_args})", file=sys.stderr)
+    print(f"Processing URL: {url} (extra_args: {extra_args})", file=sys.stderr)
 
     # Match against rules
     for pattern, browser_config in BROWSER_RULES.items():
@@ -212,19 +210,19 @@ def main():
             if isinstance(browser_config, tuple):
                 browser, profile = browser_config
                 print(f"Matched pattern {pattern}, using profile: {profile}", file=sys.stderr)
-                open_with_browser(browser, url, chromium_profile=profile, app_mode=app_mode, extra_args=extra_args)
+                open_with_browser(browser, url_arg, chromium_profile=profile, extra_args=extra_args)
             else:
                 print(f"Matched pattern {pattern}, no profile specified", file=sys.stderr)
-                open_with_browser(browser_config, url, app_mode=app_mode, extra_args=extra_args)
+                open_with_browser(browser_config, url_arg, extra_args=extra_args)
             return
 
     # Fallback to default
     print(f"No pattern matched, using default browser", file=sys.stderr)
     if isinstance(DEFAULT_BROWSER, tuple):
         browser, profile = DEFAULT_BROWSER
-        open_with_browser(browser, url, chromium_profile=profile, app_mode=app_mode, extra_args=extra_args)
+        open_with_browser(browser, url_arg, chromium_profile=profile, extra_args=extra_args)
     else:
-        open_with_browser(DEFAULT_BROWSER, url, app_mode=app_mode, extra_args=extra_args)
+        open_with_browser(DEFAULT_BROWSER, url_arg, extra_args=extra_args)
 
 
 if __name__ == "__main__":
