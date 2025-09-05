@@ -185,9 +185,24 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
 
 
 def main():
+    # Allow launching without URL
     if len(sys.argv) < 2:
-        print("Usage: shepherd.py <url> [extra args...]", file=sys.stderr)
-        sys.exit(1)
+        print("Launching browser without URL...", file=sys.stderr)
+        # Launch default browser with no URL
+        if isinstance(DEFAULT_BROWSER, tuple):
+            browser, profile = DEFAULT_BROWSER
+            try:
+                cmd = [browser]
+                if profile:
+                    profile_dir = chromium_profile_lookup(profile)
+                    if profile_dir:
+                        cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
+                subprocess.Popen(cmd)
+            except FileNotFoundError:
+                subprocess.Popen([DEFAULT_BROWSER[0]])
+        else:
+            subprocess.Popen([DEFAULT_BROWSER])
+        return
 
     first_arg = sys.argv[1]
     extra_args = sys.argv[2:] if len(sys.argv) > 2 else []
