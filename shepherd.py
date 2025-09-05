@@ -23,6 +23,8 @@ def load_config():
         r"^https://example\.com": ("/usr/bin/chromium", "Default"),
     }
     default_browser = "/usr/bin/chromium"
+    default_enable_notifications = False
+    default_notification_command = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
     
     if config_file.exists():
         try:
@@ -34,8 +36,10 @@ def load_config():
             # Get configuration from the module
             browser_rules = getattr(config, 'BROWSER_RULES', default_rules)
             default_browser = getattr(config, 'DEFAULT_BROWSER', default_browser)
+            enable_notifications = getattr(config, 'ENABLE_NOTIFICATIONS', default_enable_notifications)
+            notification_command = getattr(config, 'NOTIFICATION_COMMAND', default_notification_command)
             
-            return browser_rules, default_browser
+            return browser_rules, default_browser, enable_notifications, notification_command
         except Exception as e:
             print(f"Error loading config from {config_file}: {e}", file=sys.stderr)
             print("Using default configuration", file=sys.stderr)
@@ -68,16 +72,31 @@ BROWSER_RULES = {
 
 # Default browser for unmatched URLs
 DEFAULT_BROWSER = "/usr/bin/chromium"
+
+# Notification settings (optional)
+ENABLE_NOTIFICATIONS = False  # Set to True to enable desktop notifications
+NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
 '''
                 example_config.write_text(example_content)
                 print(f"Created example config: {example_config}", file=sys.stderr)
                 print(f"Copy {example_config} to {config_file} and customize it", file=sys.stderr)
     
-    return default_rules, default_browser
+    return default_rules, default_browser, default_enable_notifications, default_notification_command
 
 
 # Load configuration
-BROWSER_RULES, DEFAULT_BROWSER = load_config()
+BROWSER_RULES, DEFAULT_BROWSER, ENABLE_NOTIFICATIONS, NOTIFICATION_COMMAND = load_config()
+
+
+def send_notification(message):
+    """Send a desktop notification if enabled."""
+    if ENABLE_NOTIFICATIONS and NOTIFICATION_COMMAND:
+        try:
+            # Replace {message} placeholder in the command
+            cmd = [arg.replace('{message}', message) for arg in NOTIFICATION_COMMAND]
+            subprocess.run(cmd, check=False, capture_output=True)
+        except Exception as e:
+            print(f"Failed to send notification: {e}", file=sys.stderr)
 
 
 def chromium_profile_lookup(profile_name=""):
@@ -146,7 +165,9 @@ def open_with_browser(browser, url, chromium_profile=None, app_mode=False, extra
                 print(f"Using profile directory: {profile_dir}", file=sys.stderr)
                 cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
             else:
-                print(f"Warning: Profile '{chromium_profile}' not found in Chromium", file=sys.stderr)
+                error_msg = f"Error: Profile '{chromium_profile}' not found"
+                print(f"{error_msg}", file=sys.stderr)
+                send_notification(error_msg)
         
         # Add any extra arguments
         if extra_args:
@@ -161,7 +182,9 @@ def open_with_browser(browser, url, chromium_profile=None, app_mode=False, extra
         print(f"Running command: {' '.join(cmd)}", file=sys.stderr)
         subprocess.Popen(cmd)
     except FileNotFoundError:
-        print(f"Error: Browser not found: {browser}", file=sys.stderr)
+        error_msg = f"Error: Browser not found: {browser}"
+        print(f"{error_msg}", file=sys.stderr)
+        send_notification(error_msg)
         subprocess.Popen([DEFAULT_BROWSER, url])
 
 

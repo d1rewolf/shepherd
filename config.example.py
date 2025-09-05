@@ -27,3 +27,14 @@ DEFAULT_BROWSER = "/usr/bin/chromium"
 
 # Or with a specific profile for unmatched URLs:
 # DEFAULT_BROWSER = ("/usr/bin/chromium", "Personal")
+
+# Notification settings (optional)
+# Set to True to get desktop notifications when profiles or browsers aren't found
+ENABLE_NOTIFICATIONS = False
+
+# Command to use for notifications - {message} will be replaced with the error message
+NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
+
+# You can customize this to use any notification system:
+# NOTIFICATION_COMMAND = ['dunstify', '-a', 'Shepherd', '{message}']
+# NOTIFICATION_COMMAND = ['zenity', '--notification', '--text={message}']
