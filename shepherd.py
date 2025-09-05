@@ -48,7 +48,7 @@ def load_config():
             # Create example config
             example_config = config_dir / "config.example.py"
             if not example_config.exists():
-                example_content = '''"""
+                example_content = r'''"""
 Shepherd configuration file
 Rename this to config.py and customize for your needs
 """
@@ -167,7 +167,7 @@ def open_with_browser(browser, url, chromium_profile=None, app_mode=False, extra
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: url_router.py <url> [extra args...]", file=sys.stderr)
+        print("Usage: shepherd.py <url> [extra args...]", file=sys.stderr)
         sys.exit(1)
 
     url = sys.argv[1]

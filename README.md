@@ -2,6 +2,8 @@
 
 A smart URL router that guides your web links to the right browser profile - like a shepherd tending different flocks. Because sometimes you need your work emails in one profile and cat videos in another.
 
+DISCLAIMER: shepherd.py has been vibe-coded by an experienced programmer, but most of the code is written by claude code. Make of that what you will.
+
 ## What is shepherd.py?
 
 shepherd.py is a lightweight URL router that automatically opens different websites in different browser profiles based on customizable rules. Perfect for keeping your work, personal, and whatever-else-you're-into browsing separate.
