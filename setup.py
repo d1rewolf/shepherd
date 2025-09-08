@@ -6,12 +6,15 @@ shepherd.py - Smart URL router for browser profiles
 from setuptools import setup, find_packages
 import os
 
+# Read version from __version__.py
+exec(open("__version__.py").read())
+
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
     name="shepherd-browser-router",
-    version="1.0.0",
+    version=__version__,
     author="shepherd.py contributors",
     description="A smart URL router that guides web links to the right browser profile",
     long_description=long_description,

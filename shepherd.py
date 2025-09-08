@@ -4,6 +4,7 @@ shepherd.py - Smart URL router for browser profiles
 https://github.com/d1rewolf/shepherd
 """
 
+from __version__ import __version__
 import json
 import os
 import re
