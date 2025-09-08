@@ -10,7 +10,30 @@ import re
 import subprocess
 import sys
 import importlib.util
+import logging
+from datetime import datetime
 from pathlib import Path
+
+# Set up logging following XDG Base Directory specification
+def setup_logging(log_level_str="INFO"):
+    """Set up logging to XDG_STATE_HOME/shepherd/shepherd.log"""
+    xdg_state_home = os.environ.get('XDG_STATE_HOME', Path.home() / '.local' / 'state')
+    log_dir = Path(xdg_state_home) / 'shepherd'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / 'shepherd.log'
+    
+    # Convert string log level to logging constant
+    log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+    
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stderr)  # Keep stderr output for debugging
+        ]
+    )
+    return logging.getLogger(__name__)
 
 
 def load_config():
@@ -25,6 +48,7 @@ def load_config():
     default_browser = "/usr/bin/chromium"
     default_enable_notifications = False
     default_notification_command = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
+    default_log_level = "INFO"
     
     if config_file.exists():
         try:
@@ -38,8 +62,9 @@ def load_config():
             default_browser = getattr(config, 'DEFAULT_BROWSER', default_browser)
             enable_notifications = getattr(config, 'ENABLE_NOTIFICATIONS', default_enable_notifications)
             notification_command = getattr(config, 'NOTIFICATION_COMMAND', default_notification_command)
+            log_level = getattr(config, 'LOG_LEVEL', default_log_level)
             
-            return browser_rules, default_browser, enable_notifications, notification_command
+            return browser_rules, default_browser, enable_notifications, notification_command, log_level
         except Exception as e:
             print(f"Error loading config from {config_file}: {e}", file=sys.stderr)
             print("Using default configuration", file=sys.stderr)
@@ -81,11 +106,14 @@ NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-wa
                 print(f"Created example config: {example_config}", file=sys.stderr)
                 print(f"Copy {example_config} to {config_file} and customize it", file=sys.stderr)
     
-    return default_rules, default_browser, default_enable_notifications, default_notification_command
+    return default_rules, default_browser, default_enable_notifications, default_notification_command, default_log_level
 
 
 # Load configuration
-BROWSER_RULES, DEFAULT_BROWSER, ENABLE_NOTIFICATIONS, NOTIFICATION_COMMAND = load_config()
+BROWSER_RULES, DEFAULT_BROWSER, ENABLE_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL = load_config()
+
+# Initialize logging with configured log level
+logger = setup_logging(LOG_LEVEL)
 
 
 def send_notification(message):
@@ -96,7 +124,7 @@ def send_notification(message):
             cmd = [arg.replace('{message}', message) for arg in NOTIFICATION_COMMAND]
             subprocess.run(cmd, check=False, capture_output=True)
         except Exception as e:
-            print(f"Failed to send notification: {e}", file=sys.stderr)
+            logger.error(f"Failed to send notification: {e}")
 
 
 def chromium_profile_lookup(profile_name=""):
@@ -116,7 +144,7 @@ def chromium_profile_lookup(profile_name=""):
     local_state_path = Path.home() / ".config/chromium/Local State"
     
     if not local_state_path.exists():
-        print(f"Error: LocalState file not found at {local_state_path}", file=sys.stderr)
+        logger.error(f"LocalState file not found at {local_state_path}")
         return ""
     
     try:
@@ -136,7 +164,7 @@ def chromium_profile_lookup(profile_name=""):
         return ""
     
     except (json.JSONDecodeError, KeyError) as e:
-        print(f"Error reading LocalState file: {e}", file=sys.stderr)
+        logger.error(f"Error reading LocalState file: {e}")
         return ""
 
 
@@ -161,11 +189,11 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
         if chromium_profile and is_chromium_based:
             profile_dir = chromium_profile_lookup(chromium_profile)
             if profile_dir:
-                print(f"Using profile directory: {profile_dir}", file=sys.stderr)
+                logger.info(f"Using profile directory: {profile_dir}")
                 cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
             else:
                 error_msg = f"Error: Profile '{chromium_profile}' not found"
-                print(f"{error_msg}", file=sys.stderr)
+                logger.error(error_msg)
                 send_notification(error_msg)
         
         # Add any extra arguments
@@ -175,7 +203,7 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
         # Add the URL or --app=URL argument
         cmd.append(url_arg)
         
-        print(f"Running command: {' '.join(cmd)}", file=sys.stderr)
+        logger.info(f"Running command: {' '.join(cmd)}")
         subprocess.Popen(cmd)
     except FileNotFoundError:
         error_msg = f"Error: Browser not found: {browser}"
@@ -187,7 +215,7 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
 def main():
     # Allow launching without URL
     if len(sys.argv) < 2:
-        print("Launching browser without URL...", file=sys.stderr)
+        logger.info("Launching browser without URL...")
         # Launch default browser with no URL
         if isinstance(DEFAULT_BROWSER, tuple):
             browser, profile = DEFAULT_BROWSER
@@ -216,7 +244,7 @@ def main():
         url_arg = first_arg
     
     # Debug logging
-    print(f"Processing URL: {url} (extra_args: {extra_args})", file=sys.stderr)
+    logger.info(f"Processing URL: {url} (extra_args: {extra_args})")
 
     # Match against rules
     for pattern, browser_config in BROWSER_RULES.items():
@@ -224,15 +252,15 @@ def main():
             # Handle both string and tuple configurations
             if isinstance(browser_config, tuple):
                 browser, profile = browser_config
-                print(f"Matched pattern {pattern}, using profile: {profile}", file=sys.stderr)
+                logger.info(f"Matched pattern {pattern}, using profile: {profile}")
                 open_with_browser(browser, url_arg, chromium_profile=profile, extra_args=extra_args)
             else:
-                print(f"Matched pattern {pattern}, no profile specified", file=sys.stderr)
+                logger.info(f"Matched pattern {pattern}, no profile specified")
                 open_with_browser(browser_config, url_arg, extra_args=extra_args)
             return
 
     # Fallback to default
-    print(f"No pattern matched, using default browser", file=sys.stderr)
+    logger.info(f"No pattern matched, using default browser")
     if isinstance(DEFAULT_BROWSER, tuple):
         browser, profile = DEFAULT_BROWSER
         open_with_browser(browser, url_arg, chromium_profile=profile, extra_args=extra_args)
