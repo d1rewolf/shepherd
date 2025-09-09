@@ -27,7 +27,7 @@ shepherd.py is a lightweight URL router that automatically opens different websi
 - **App Mode Support** - Preserves web app functionality when launched via desktop shortcuts
 - **Default Fallback** - URLs that don't match any rule go to your default browser
 - **Simple Configuration** - Edit rules in a separate config file
-- **Desktop Notifications** - Optional notifications when profiles or browsers aren't found
+- **Desktop Notifications** - Optional notifications showing which profile is being used for each URL
 
 ## Installation
 
@@ -149,8 +149,9 @@ DEFAULT_BROWSER = "/usr/bin/chromium"
 # Or with a default profile:
 # DEFAULT_BROWSER = ("/usr/bin/chromium", "Personal")
 
-# Enable desktop notifications for errors (optional)
-ENABLE_NOTIFICATIONS = True
+# Enable desktop notifications (optional)
+ENABLE_INFO_NOTIFICATIONS = True  # Show profile routing notifications
+ENABLE_ERROR_NOTIFICATIONS = True  # Show error notifications
 NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
 ```
 
@@ -162,13 +163,24 @@ Both rules and DEFAULT_BROWSER can be either:
 
 ### Notification Settings
 
-shepherd.py can send desktop notifications when it encounters errors:
+shepherd.py can send desktop notifications to keep you informed about routing decisions:
 
-- **ENABLE_NOTIFICATIONS**: Set to `True` to enable notifications
+- **ENABLE_INFO_NOTIFICATIONS**: Set to `True` to show profile routing notifications
+- **ENABLE_ERROR_NOTIFICATIONS**: Set to `True` to show error notifications
 - **NOTIFICATION_COMMAND**: Customize the notification command
-  - `{message}` will be replaced with the error message
+  - `{message}` will be replaced with the notification text
   - Default uses `notify-send` (works with most Linux desktops)
   - Can be customized for other notification systems (dunstify, zenity, etc.)
+
+Types of notifications:
+- **Info notifications** (ENABLE_INFO_NOTIFICATIONS):
+  - "Using profile 'Work' for https://slack.com"
+  - "No matching rule for https://example.com, using default profile 'Personal'"
+- **Error notifications** (ENABLE_ERROR_NOTIFICATIONS):
+  - "Error: Profile 'OldProfile' not found"
+  - "Error: Browser not found: /usr/bin/firefox"
+
+For backward compatibility, if you have `ENABLE_NOTIFICATIONS` in your config, it will be used for error notifications.
 
 ## Usage
 

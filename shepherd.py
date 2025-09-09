@@ -47,7 +47,8 @@ def load_config():
         r"^https://example\.com": ("/usr/bin/chromium", "Default"),
     }
     default_browser = "/usr/bin/chromium"
-    default_enable_notifications = False
+    default_enable_info_notifications = False
+    default_enable_error_notifications = False
     default_notification_command = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
     default_log_level = "INFO"
     
@@ -61,11 +62,17 @@ def load_config():
             # Get configuration from the module
             browser_rules = getattr(config, 'BROWSER_RULES', default_rules)
             default_browser = getattr(config, 'DEFAULT_BROWSER', default_browser)
-            enable_notifications = getattr(config, 'ENABLE_NOTIFICATIONS', default_enable_notifications)
+            
+            # Handle backward compatibility: if ENABLE_NOTIFICATIONS exists, use it for error notifications
+            enable_notifications = getattr(config, 'ENABLE_NOTIFICATIONS', None)
+            enable_info_notifications = getattr(config, 'ENABLE_INFO_NOTIFICATIONS', default_enable_info_notifications)
+            enable_error_notifications = getattr(config, 'ENABLE_ERROR_NOTIFICATIONS', 
+                                                 enable_notifications if enable_notifications is not None else default_enable_error_notifications)
+            
             notification_command = getattr(config, 'NOTIFICATION_COMMAND', default_notification_command)
             log_level = getattr(config, 'LOG_LEVEL', default_log_level)
             
-            return browser_rules, default_browser, enable_notifications, notification_command, log_level
+            return browser_rules, default_browser, enable_info_notifications, enable_error_notifications, notification_command, log_level
         except Exception as e:
             print(f"Error loading config from {config_file}: {e}", file=sys.stderr)
             print("Using default configuration", file=sys.stderr)
@@ -100,26 +107,42 @@ BROWSER_RULES = {
 DEFAULT_BROWSER = "/usr/bin/chromium"
 
 # Notification settings (optional)
-ENABLE_NOTIFICATIONS = False  # Set to True to enable desktop notifications
+ENABLE_INFO_NOTIFICATIONS = False  # Set to True to show profile routing notifications
+ENABLE_ERROR_NOTIFICATIONS = False  # Set to True to show error notifications
 NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
+
+# Logging configuration
+# Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+LOG_LEVEL = "INFO"
 '''
                 example_config.write_text(example_content)
                 print(f"Created example config: {example_config}", file=sys.stderr)
                 print(f"Copy {example_config} to {config_file} and customize it", file=sys.stderr)
     
-    return default_rules, default_browser, default_enable_notifications, default_notification_command, default_log_level
+    return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level
 
 
 # Load configuration
-BROWSER_RULES, DEFAULT_BROWSER, ENABLE_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL = load_config()
+BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL = load_config()
 
 # Initialize logging with configured log level
 logger = setup_logging(LOG_LEVEL)
 
 
-def send_notification(message):
-    """Send a desktop notification if enabled."""
-    if ENABLE_NOTIFICATIONS and NOTIFICATION_COMMAND:
+def send_info_notification(message):
+    """Send an info desktop notification if enabled."""
+    if ENABLE_INFO_NOTIFICATIONS and NOTIFICATION_COMMAND:
+        try:
+            # Replace {message} placeholder in the command
+            cmd = [arg.replace('{message}', message) for arg in NOTIFICATION_COMMAND]
+            subprocess.run(cmd, check=False, capture_output=True)
+        except Exception as e:
+            logger.error(f"Failed to send notification: {e}")
+
+
+def send_error_notification(message):
+    """Send an error desktop notification if enabled."""
+    if ENABLE_ERROR_NOTIFICATIONS and NOTIFICATION_COMMAND:
         try:
             # Replace {message} placeholder in the command
             cmd = [arg.replace('{message}', message) for arg in NOTIFICATION_COMMAND]
@@ -195,7 +218,7 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
             else:
                 error_msg = f"Error: Profile '{chromium_profile}' not found"
                 logger.error(error_msg)
-                send_notification(error_msg)
+                send_error_notification(error_msg)
         
         # Add any extra arguments
         if extra_args:
@@ -209,7 +232,7 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
     except FileNotFoundError:
         error_msg = f"Error: Browser not found: {browser}"
         print(f"{error_msg}", file=sys.stderr)
-        send_notification(error_msg)
+        send_error_notification(error_msg)
         subprocess.Popen([DEFAULT_BROWSER, url_arg])
 
 
@@ -254,9 +277,11 @@ def main():
             if isinstance(browser_config, tuple):
                 browser, profile = browser_config
                 logger.info(f"Matched pattern {pattern}, using profile: {profile}")
+                send_info_notification(f"Using profile '{profile}' for {url}")
                 open_with_browser(browser, url_arg, chromium_profile=profile, extra_args=extra_args)
             else:
                 logger.info(f"Matched pattern {pattern}, no profile specified")
+                send_info_notification(f"Opening {url} with configured browser")
                 open_with_browser(browser_config, url_arg, extra_args=extra_args)
             return
 
@@ -264,8 +289,10 @@ def main():
     logger.info(f"No pattern matched, using default browser")
     if isinstance(DEFAULT_BROWSER, tuple):
         browser, profile = DEFAULT_BROWSER
+        send_info_notification(f"No matching rule for {url}, using default profile '{profile}'")
         open_with_browser(browser, url_arg, chromium_profile=profile, extra_args=extra_args)
     else:
+        send_info_notification(f"No matching rule for {url}, using default browser")
         open_with_browser(DEFAULT_BROWSER, url_arg, extra_args=extra_args)
 
 
