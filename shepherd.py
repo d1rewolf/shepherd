@@ -166,6 +166,7 @@ def send_error_notification(message):
 def add_profile_bookmark(profile_dir, profile_name):
     """
     Add a bookmark to the bookmarks bar showing the profile name.
+    Also ensures the bookmarks bar is visible.
     This helps users identify which profile they're using.
     
     Args:
@@ -173,6 +174,35 @@ def add_profile_bookmark(profile_dir, profile_name):
         profile_name: Friendly name of the profile
     """
     try:
+        # First, ensure bookmarks bar is visible in Preferences
+        preferences_file = profile_dir / "Preferences"
+        if preferences_file.exists():
+            try:
+                with open(preferences_file, 'r') as f:
+                    prefs = json.load(f)
+                
+                # Set bookmark bar to show on all pages
+                if "bookmark_bar" not in prefs:
+                    prefs["bookmark_bar"] = {}
+                prefs["bookmark_bar"]["show_on_all_tabs"] = True
+                
+                with open(preferences_file, 'w') as f:
+                    json.dump(prefs, f, indent=2)
+                
+                logger.info(f"Enabled bookmarks bar visibility for profile '{profile_name}'")
+            except Exception as e:
+                logger.warning(f"Could not update Preferences to show bookmarks bar: {e}")
+        else:
+            # Create minimal Preferences with bookmarks bar visible
+            prefs = {
+                "bookmark_bar": {
+                    "show_on_all_tabs": True
+                }
+            }
+            with open(preferences_file, 'w') as f:
+                json.dump(prefs, f, indent=2)
+        
+        # Now add the bookmark
         bookmarks_file = profile_dir / "Bookmarks"
         
         # Default bookmarks structure for new profiles
