@@ -283,12 +283,13 @@ def add_profile_bookmark(profile_dir, profile_name):
 def sanitize_profile_name(profile_name):
     """
     Sanitize a profile name to be safe for use as a directory name.
+    Adds "Profile_" prefix to keep directories organized.
     
     Args:
         profile_name: The friendly name of the profile (e.g., "Work & Personal")
     
     Returns:
-        Sanitized name safe for filesystem use (e.g., "Work_Personal")
+        Sanitized name with prefix (e.g., "Profile_Work_Personal")
     """
     if not profile_name:
         return "Default"
@@ -299,7 +300,8 @@ def sanitize_profile_name(profile_name):
     # Remove leading/trailing underscores and collapse multiple underscores
     safe_name = re.sub(r'_+', '_', safe_name).strip('_')
     
-    return safe_name or "Default"
+    # Add Profile_ prefix for organization
+    return f"Profile_{safe_name}" if safe_name else "Default"
 
 
 def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
