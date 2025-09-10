@@ -346,18 +346,27 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
                     
                     profile_path = config_dir / profile_dir
                     
-                    # If profile doesn't exist yet, Chrome will create it
-                    # We'll add the bookmark after a delay
+                    # Always try to add bookmark
+                    # For new profiles, Chrome needs time to create the directory
                     if not profile_path.exists():
+                        # Profile doesn't exist yet, Chrome will create it
+                        # Schedule bookmark creation after a delay
                         import threading
                         def add_bookmark_later():
                             import time
-                            time.sleep(5)  # Wait for Chrome to create the profile
-                            if profile_path.exists():
-                                add_profile_bookmark(profile_path, chromium_profile)
+                            max_attempts = 10
+                            for attempt in range(max_attempts):
+                                time.sleep(2)  # Wait for Chrome to create the profile
+                                if profile_path.exists():
+                                    logger.info(f"Profile directory created, adding bookmark for '{chromium_profile}'")
+                                    add_profile_bookmark(profile_path, chromium_profile)
+                                    break
+                                elif attempt == max_attempts - 1:
+                                    logger.warning(f"Profile directory not created after {max_attempts * 2} seconds")
                         
                         thread = threading.Thread(target=add_bookmark_later, daemon=True)
                         thread.start()
+                        logger.info(f"Scheduled bookmark creation for new profile '{chromium_profile}'")
                     else:
                         # Profile exists, add bookmark if needed
                         # Always call add_profile_bookmark - it checks internally if bookmark exists
