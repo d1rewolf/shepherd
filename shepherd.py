@@ -52,6 +52,7 @@ def load_config():
     default_notification_command = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
     default_log_level = "INFO"
     default_create_missing_profiles = False
+    default_add_profile_bookmark = False
     
     if config_file.exists():
         try:
@@ -73,8 +74,9 @@ def load_config():
             notification_command = getattr(config, 'NOTIFICATION_COMMAND', default_notification_command)
             log_level = getattr(config, 'LOG_LEVEL', default_log_level)
             create_missing_profiles = getattr(config, 'CREATE_MISSING_PROFILES', default_create_missing_profiles)
+            add_profile_bookmark = getattr(config, 'ADD_PROFILE_BOOKMARK', default_add_profile_bookmark)
             
-            return browser_rules, default_browser, enable_info_notifications, enable_error_notifications, notification_command, log_level, create_missing_profiles
+            return browser_rules, default_browser, enable_info_notifications, enable_error_notifications, notification_command, log_level, create_missing_profiles, add_profile_bookmark
         except Exception as e:
             print(f"Error loading config from {config_file}: {e}", file=sys.stderr)
             print("Using default configuration", file=sys.stderr)
@@ -120,16 +122,20 @@ LOG_LEVEL = "INFO"
 # Automatically create browser profiles if they don't exist
 # When enabled, shepherd will use the profile name as the directory name
 CREATE_MISSING_PROFILES = False
+
+# Add a bookmark to the bookmarks bar showing the profile name
+# Helps users identify which profile they're currently using
+ADD_PROFILE_BOOKMARK = False
 '''
                 example_config.write_text(example_content)
                 print(f"Created example config: {example_config}", file=sys.stderr)
                 print(f"Copy {example_config} to {config_file} and customize it", file=sys.stderr)
     
-    return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level, default_create_missing_profiles
+    return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level, default_create_missing_profiles, default_add_profile_bookmark
 
 
 # Load configuration
-BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL, CREATE_MISSING_PROFILES = load_config()
+BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL, CREATE_MISSING_PROFILES, ADD_PROFILE_BOOKMARK = load_config()
 
 # Initialize logging with configured log level
 logger = setup_logging(LOG_LEVEL)
@@ -155,6 +161,93 @@ def send_error_notification(message):
             subprocess.run(cmd, check=False, capture_output=True)
         except Exception as e:
             logger.error(f"Failed to send notification: {e}")
+
+
+def add_profile_bookmark(profile_dir, profile_name):
+    """
+    Add a bookmark to the bookmarks bar showing the profile name.
+    This helps users identify which profile they're using.
+    
+    Args:
+        profile_dir: Path to the profile directory
+        profile_name: Friendly name of the profile
+    """
+    try:
+        bookmarks_file = profile_dir / "Bookmarks"
+        
+        # Default bookmarks structure for new profiles
+        bookmarks = {
+            "checksum": "",
+            "roots": {
+                "bookmark_bar": {
+                    "children": [
+                        {
+                            "date_added": "13367051200000000",
+                            "id": "1",
+                            "name": f"📍 Profile: {profile_name}",
+                            "type": "url",
+                            "url": f"data:text/html,<h1>Profile: {profile_name}</h1>"
+                        }
+                    ],
+                    "date_added": "13367051200000000",
+                    "date_modified": "13367051200000000",
+                    "id": "1",
+                    "name": "Bookmarks bar",
+                    "type": "folder"
+                },
+                "other": {
+                    "children": [],
+                    "date_added": "13367051200000000",
+                    "date_modified": "0",
+                    "id": "2",
+                    "name": "Other bookmarks",
+                    "type": "folder"
+                },
+                "synced": {
+                    "children": [],
+                    "date_added": "13367051200000000",
+                    "date_modified": "0",
+                    "id": "3",
+                    "name": "Mobile bookmarks",
+                    "type": "folder"
+                }
+            },
+            "version": 1
+        }
+        
+        # If bookmarks file exists, read it and add our bookmark
+        if bookmarks_file.exists():
+            with open(bookmarks_file, 'r') as f:
+                bookmarks = json.load(f)
+            
+            # Check if our bookmark already exists
+            bookmark_bar = bookmarks.get("roots", {}).get("bookmark_bar", {}).get("children", [])
+            profile_bookmark_exists = any(
+                "📍 Profile:" in child.get("name", "") 
+                for child in bookmark_bar
+            )
+            
+            if not profile_bookmark_exists:
+                # Add our profile bookmark at the beginning
+                new_bookmark = {
+                    "date_added": "13367051200000000",
+                    "id": str(len(bookmark_bar) + 100),  # Ensure unique ID
+                    "name": f"📍 Profile: {profile_name}",
+                    "type": "url",
+                    "url": f"data:text/html,<h1>Profile: {profile_name}</h1>"
+                }
+                bookmarks["roots"]["bookmark_bar"]["children"].insert(0, new_bookmark)
+        
+        # Write bookmarks file
+        with open(bookmarks_file, 'w') as f:
+            json.dump(bookmarks, f, indent=2)
+        
+        logger.info(f"Added profile bookmark for '{profile_name}'")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Could not add profile bookmark: {e}")
+        return False
 
 
 def sanitize_profile_name(profile_name):
@@ -206,9 +299,41 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
                 logger.info(f"Using profile directory: {profile_dir} (auto-create enabled)")
                 cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
                 
-                # Note: Chrome will automatically create the directory on first use
-                # The profile will show as "Person N" in Chrome UI, but the directory
-                # name will be meaningful (e.g., CNN, Reuters, Banking, etc.)
+                # Add profile bookmark if enabled and profile is being created
+                if ADD_PROFILE_BOOKMARK:
+                    # Get the browser config directory
+                    browser_name = os.path.basename(browser).lower()
+                    if 'chromium' in browser_name:
+                        config_dir = Path.home() / '.config' / 'chromium'
+                    elif 'chrome' in browser_name:
+                        config_dir = Path.home() / '.config' / 'google-chrome'
+                    elif 'brave' in browser_name:
+                        config_dir = Path.home() / '.config' / 'BraveSoftware' / 'Brave-Browser'
+                    else:
+                        config_dir = Path.home() / '.config' / 'chromium'  # fallback
+                    
+                    profile_path = config_dir / profile_dir
+                    
+                    # If profile doesn't exist yet, Chrome will create it
+                    # We'll add the bookmark after a delay
+                    if not profile_path.exists():
+                        import threading
+                        def add_bookmark_later():
+                            import time
+                            time.sleep(3)  # Wait for Chrome to create the profile
+                            if profile_path.exists():
+                                add_profile_bookmark(profile_path, chromium_profile)
+                        
+                        thread = threading.Thread(target=add_bookmark_later, daemon=True)
+                        thread.start()
+                    else:
+                        # Profile exists, check if bookmark is needed
+                        bookmarks_file = profile_path / "Bookmarks"
+                        if bookmarks_file.exists():
+                            with open(bookmarks_file, 'r') as f:
+                                content = f.read()
+                                if "📍 Profile:" not in content:
+                                    add_profile_bookmark(profile_path, chromium_profile)
             else:
                 # Legacy behavior: look up profile in LocalState
                 # This requires manual profile creation in Chrome
