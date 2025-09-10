@@ -320,20 +320,16 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
                         import threading
                         def add_bookmark_later():
                             import time
-                            time.sleep(3)  # Wait for Chrome to create the profile
+                            time.sleep(5)  # Wait for Chrome to create the profile
                             if profile_path.exists():
                                 add_profile_bookmark(profile_path, chromium_profile)
                         
                         thread = threading.Thread(target=add_bookmark_later, daemon=True)
                         thread.start()
                     else:
-                        # Profile exists, check if bookmark is needed
-                        bookmarks_file = profile_path / "Bookmarks"
-                        if bookmarks_file.exists():
-                            with open(bookmarks_file, 'r') as f:
-                                content = f.read()
-                                if "📍 Profile:" not in content:
-                                    add_profile_bookmark(profile_path, chromium_profile)
+                        # Profile exists, add bookmark if needed
+                        # Always call add_profile_bookmark - it checks internally if bookmark exists
+                        add_profile_bookmark(profile_path, chromium_profile)
             else:
                 # Legacy behavior: look up profile in LocalState
                 # This requires manual profile creation in Chrome
