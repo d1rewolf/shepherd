@@ -214,9 +214,9 @@ def add_profile_bookmark(profile_dir, profile_name):
                         {
                             "date_added": "13367051200000000",
                             "id": "1",
-                            "name": f"📍 Profile: {profile_name}",
+                            "name": f"Profile: {profile_name}",
                             "type": "url",
-                            "url": f"data:text/html,<h1>Profile: {profile_name}</h1>"
+                            "url": "chrome://version/"
                         }
                     ],
                     "date_added": "13367051200000000",
@@ -253,7 +253,7 @@ def add_profile_bookmark(profile_dir, profile_name):
             # Check if our bookmark already exists
             bookmark_bar = bookmarks.get("roots", {}).get("bookmark_bar", {}).get("children", [])
             profile_bookmark_exists = any(
-                "📍 Profile:" in child.get("name", "") 
+                child.get("name", "").startswith("Profile:") 
                 for child in bookmark_bar
             )
             
@@ -262,9 +262,9 @@ def add_profile_bookmark(profile_dir, profile_name):
                 new_bookmark = {
                     "date_added": "13367051200000000",
                     "id": str(len(bookmark_bar) + 100),  # Ensure unique ID
-                    "name": f"📍 Profile: {profile_name}",
+                    "name": f"Profile: {profile_name}",
                     "type": "url",
-                    "url": f"data:text/html,<h1>Profile: {profile_name}</h1>"
+                    "url": "chrome://version/"
                 }
                 bookmarks["roots"]["bookmark_bar"]["children"].insert(0, new_bookmark)
         
