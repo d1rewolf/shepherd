@@ -51,6 +51,7 @@ def load_config():
     default_enable_error_notifications = False
     default_notification_command = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
     default_log_level = "INFO"
+    default_create_missing_profiles = False
     
     if config_file.exists():
         try:
@@ -71,8 +72,9 @@ def load_config():
             
             notification_command = getattr(config, 'NOTIFICATION_COMMAND', default_notification_command)
             log_level = getattr(config, 'LOG_LEVEL', default_log_level)
+            create_missing_profiles = getattr(config, 'CREATE_MISSING_PROFILES', default_create_missing_profiles)
             
-            return browser_rules, default_browser, enable_info_notifications, enable_error_notifications, notification_command, log_level
+            return browser_rules, default_browser, enable_info_notifications, enable_error_notifications, notification_command, log_level, create_missing_profiles
         except Exception as e:
             print(f"Error loading config from {config_file}: {e}", file=sys.stderr)
             print("Using default configuration", file=sys.stderr)
@@ -114,16 +116,20 @@ NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-wa
 # Logging configuration
 # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
 LOG_LEVEL = "INFO"
+
+# Automatically create browser profiles if they don't exist
+# When enabled, shepherd will use the profile name as the directory name
+CREATE_MISSING_PROFILES = False
 '''
                 example_config.write_text(example_content)
                 print(f"Created example config: {example_config}", file=sys.stderr)
                 print(f"Copy {example_config} to {config_file} and customize it", file=sys.stderr)
     
-    return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level
+    return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level, default_create_missing_profiles
 
 
 # Load configuration
-BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL = load_config()
+BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL, CREATE_MISSING_PROFILES = load_config()
 
 # Initialize logging with configured log level
 logger = setup_logging(LOG_LEVEL)
@@ -151,50 +157,33 @@ def send_error_notification(message):
             logger.error(f"Failed to send notification: {e}")
 
 
-def chromium_profile_lookup(profile_name=""):
+def sanitize_profile_name(profile_name):
     """
-    Map a friendly profile name to Chromium's actual profile directory.
-    Reads profile information directly from Chromium's LocalState file.
+    Sanitize a profile name to be safe for use as a directory name.
     
     Args:
-        profile_name: The friendly name of the profile (e.g., "Work", "Personal")
+        profile_name: The friendly name of the profile (e.g., "Work & Personal")
     
     Returns:
-        Profile directory name (e.g., "Default", "Profile 1") or empty string if not found
+        Sanitized name safe for filesystem use (e.g., "Work_Personal")
     """
     if not profile_name:
         return "Default"
     
-    local_state_path = Path.home() / ".config/chromium/Local State"
+    # Replace any non-alphanumeric characters (except dash and underscore) with underscore
+    safe_name = re.sub(r'[^\w\-]', '_', profile_name)
     
-    if not local_state_path.exists():
-        logger.error(f"LocalState file not found at {local_state_path}")
-        return ""
+    # Remove leading/trailing underscores and collapse multiple underscores
+    safe_name = re.sub(r'_+', '_', safe_name).strip('_')
     
-    try:
-        with open(local_state_path, 'r') as f:
-            local_state = json.load(f)
-        
-        # Look up profile in info_cache
-        info_cache = local_state.get('profile', {}).get('info_cache', {})
-        
-        for profile_dir, profile_info in info_cache.items():
-            if profile_info.get('name') == profile_name:
-                # Verify the directory exists
-                profile_path = Path.home() / ".config/chromium" / profile_dir
-                if profile_path.exists():
-                    return profile_dir
-        
-        return ""
-    
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Error reading LocalState file: {e}")
-        return ""
+    return safe_name or "Default"
 
 
 def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
     """
     Launch the browser with the given URL or --app=URL argument.
+    If CREATE_MISSING_PROFILES is True, will automatically create profiles by using
+    the profile name as the directory name.
     
     Args:
         browser: Path to the browser executable
@@ -211,14 +200,23 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
         
         # Add profile argument for Chromium-based browsers if specified
         if chromium_profile and is_chromium_based:
-            profile_dir = chromium_profile_lookup(chromium_profile)
-            if profile_dir:
-                logger.info(f"Using profile directory: {profile_dir}")
+            if CREATE_MISSING_PROFILES:
+                # Simple approach: use sanitized profile name as directory name
+                profile_dir = sanitize_profile_name(chromium_profile)
+                logger.info(f"Using profile directory: {profile_dir} (auto-create enabled)")
                 cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
+                
+                # Note: Chrome will automatically create the directory on first use
+                # The profile will show as "Person N" in Chrome UI, but the directory
+                # name will be meaningful (e.g., CNN, Reuters, Banking, etc.)
             else:
-                error_msg = f"Error: Profile '{chromium_profile}' not found"
+                # Legacy behavior: look up profile in LocalState
+                # This requires manual profile creation in Chrome
+                logger.warning("CREATE_MISSING_PROFILES is disabled - using legacy profile lookup")
+                error_msg = f"Error: Profile '{chromium_profile}' requires manual creation in browser"
                 logger.error(error_msg)
                 send_error_notification(error_msg)
+                # Don't add profile arguments - let it use default
         
         # Add any extra arguments
         if extra_args:
@@ -243,15 +241,7 @@ def main():
         # Launch default browser with no URL
         if isinstance(DEFAULT_BROWSER, tuple):
             browser, profile = DEFAULT_BROWSER
-            try:
-                cmd = [browser]
-                if profile:
-                    profile_dir = chromium_profile_lookup(profile)
-                    if profile_dir:
-                        cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
-                subprocess.Popen(cmd)
-            except FileNotFoundError:
-                subprocess.Popen([DEFAULT_BROWSER[0]])
+            open_with_browser(browser, "", chromium_profile=profile)
         else:
             subprocess.Popen([DEFAULT_BROWSER])
         return
