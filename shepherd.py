@@ -141,26 +141,24 @@ BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICA
 logger = setup_logging(LOG_LEVEL)
 
 
-def send_info_notification(message):
-    """Send an info desktop notification if enabled."""
-    if ENABLE_INFO_NOTIFICATIONS and NOTIFICATION_COMMAND:
+def send_notification(message):
+    """Send desktop notification."""
+    if NOTIFICATION_COMMAND:
         try:
-            # Replace {message} placeholder in the command
             cmd = [arg.replace('{message}', message) for arg in NOTIFICATION_COMMAND]
             subprocess.run(cmd, check=False, capture_output=True)
         except Exception as e:
             logger.error(f"Failed to send notification: {e}")
 
+def send_info_notification(message):
+    """Send info notification."""
+    if ENABLE_INFO_NOTIFICATIONS:
+        send_notification(message)
 
 def send_error_notification(message):
-    """Send an error desktop notification if enabled."""
-    if ENABLE_ERROR_NOTIFICATIONS and NOTIFICATION_COMMAND:
-        try:
-            # Replace {message} placeholder in the command
-            cmd = [arg.replace('{message}', message) for arg in NOTIFICATION_COMMAND]
-            subprocess.run(cmd, check=False, capture_output=True)
-        except Exception as e:
-            logger.error(f"Failed to send notification: {e}")
+    """Send error notification."""
+    if ENABLE_ERROR_NOTIFICATIONS:
+        send_notification(message)
 
 
 def add_profile_bookmark(profile_dir, profile_name):
@@ -252,19 +250,11 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
                     )
                     profile_path = config_dir / profile_dir
                     
-                    if not profile_path.exists():
-                        # Delayed bookmark for new profiles
-                        import threading, time
-                        def add_bookmark_later():
-                            for _ in range(10):
-                                time.sleep(2)
-                                if profile_path.exists():
-                                    add_profile_bookmark(profile_path, chromium_profile)
-                                    break
-                        threading.Thread(target=add_bookmark_later, daemon=True).start()
-                        logger.info(f"Scheduled bookmark for '{chromium_profile}'")
-                    else:
-                        add_profile_bookmark(profile_path, chromium_profile)
+                    # Pre-create directory if needed (Chrome will initialize it)
+                    profile_path.mkdir(parents=True, exist_ok=True)
+                    
+                    # Add bookmark immediately
+                    add_profile_bookmark(profile_path, chromium_profile)
             else:
                 logger.error(f"Profile '{chromium_profile}' requires manual creation")
                 send_error_notification(f"Profile '{chromium_profile}' not found")
