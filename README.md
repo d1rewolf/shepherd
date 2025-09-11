@@ -23,6 +23,8 @@ shepherd.py is a lightweight URL router that automatically opens different websi
 ## Features
 
 - **Smart URL Routing** - Define regex patterns to route URLs to specific browser profiles
+- **Automatic Profile Creation** - Creates browser profiles on-the-fly when they don't exist
+- **Profile Indicators** - Adds bookmarks showing which profile you're currently using
 - **Multi-Profile Support** - Works with Chromium-based browsers' profile system
 - **App Mode Support** - Preserves web app functionality when launched via desktop shortcuts
 - **Default Fallback** - URLs that don't match any rule go to your default browser
@@ -153,6 +155,10 @@ DEFAULT_BROWSER = "/usr/bin/chromium"
 ENABLE_INFO_NOTIFICATIONS = True  # Show profile routing notifications
 ENABLE_ERROR_NOTIFICATIONS = True  # Show error notifications
 NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
+
+# Automatic profile creation (NEW!)
+CREATE_MISSING_PROFILES = True  # Auto-create profiles that don't exist yet
+ADD_PROFILE_BOOKMARK = True      # Add "Profile: [Name]" bookmark to identify profiles
 ```
 
 ### Rule Format
@@ -214,9 +220,22 @@ shepherd.py automatically detects and supports profile switching for:
 ## How It Works
 
 1. **URL Matching**: When a URL is opened, shepherd.py checks it against your defined regex patterns
-2. **Profile Lookup**: For Chromium-based browsers, it reads the browser's Local State file to map friendly profile names to profile directories
+2. **Automatic Profile Creation** (when enabled): If a profile doesn't exist, shepherd.py creates it automatically
 3. **Smart Routing**: Opens the URL in the matched browser/profile combination
 4. **App Mode Preservation**: Maintains web app functionality when launched with `--app` flag
+
+### Automatic Profile Creation
+
+When `CREATE_MISSING_PROFILES = True`, shepherd.py will automatically create browser profiles that don't exist yet. Here's how it works:
+
+1. **Profile Directory Naming**: Profiles are created as `Profile_[Name]` directories (e.g., `Profile_CNN`, `Profile_Work`)
+2. **Automatic Creation**: Chrome/Chromium creates the profile on first use - no manual setup needed
+3. **Profile Indicators**: When `ADD_PROFILE_BOOKMARK = True`, a bookmark "Profile: [Name]" is added to the bookmarks bar
+4. **Bookmarks Bar**: Automatically shows the bookmarks bar so you can see which profile you're in
+
+This means you can add a new rule like `r"^https://.*\.example\.com": ("/usr/bin/chromium", "Example")` and the "Example" profile will be created automatically the first time you visit example.com.
+
+**Note**: Profile directories will be named `Profile_Example` but will show as "Person 1", "Person 2", etc. in Chrome's UI. The bookmark indicator helps you identify which profile you're actually using.
 
 ## Examples
 
@@ -254,9 +273,17 @@ BROWSER_RULES = {
 
 ### Profile Not Found
 
-If shepherd.py can't find a profile, check:
-1. The profile name matches exactly what's shown in your browser's profile manager
-2. The browser's Local State file exists at `~/.config/[browser]/Local State`
+If `CREATE_MISSING_PROFILES = False` and shepherd.py can't find a profile:
+1. The profile needs to be manually created in your browser's profile manager
+2. Or enable `CREATE_MISSING_PROFILES = True` to auto-create profiles
+
+### Auto-Created Profiles
+
+If `CREATE_MISSING_PROFILES = True`:
+- Profiles are created as directories like `~/.config/chromium/Profile_Work/`
+- Chrome's UI will show them as "Person 1", "Person 2", etc.
+- Use the bookmark indicator ("Profile: Work") to identify which profile you're in
+- Profile directories persist even after removing rules from config
 
 ### Debug Mode
 
