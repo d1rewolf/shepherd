@@ -164,230 +164,117 @@ def send_error_notification(message):
 
 
 def add_profile_bookmark(profile_dir, profile_name):
-    """
-    Add a bookmark to the bookmarks bar showing the profile name.
-    Also ensures the bookmarks bar is visible.
-    This helps users identify which profile they're using.
-    
-    Args:
-        profile_dir: Path to the profile directory
-        profile_name: Friendly name of the profile
-    """
+    """Add profile bookmark and enable bookmarks bar."""
     try:
-        # First, ensure bookmarks bar is visible in Preferences
-        preferences_file = profile_dir / "Preferences"
-        if preferences_file.exists():
-            try:
-                with open(preferences_file, 'r') as f:
-                    prefs = json.load(f)
-                
-                # Set bookmark bar to show on all pages
-                if "bookmark_bar" not in prefs:
-                    prefs["bookmark_bar"] = {}
-                prefs["bookmark_bar"]["show_on_all_tabs"] = True
-                
-                with open(preferences_file, 'w') as f:
-                    json.dump(prefs, f, indent=2)
-                
-                logger.info(f"Enabled bookmarks bar visibility for profile '{profile_name}'")
-            except Exception as e:
-                logger.warning(f"Could not update Preferences to show bookmarks bar: {e}")
-        else:
-            # Create minimal Preferences with bookmarks bar visible
-            prefs = {
-                "bookmark_bar": {
-                    "show_on_all_tabs": True
-                }
-            }
-            with open(preferences_file, 'w') as f:
-                json.dump(prefs, f, indent=2)
+        # Enable bookmarks bar
+        prefs_file = profile_dir / "Preferences"
+        try:
+            prefs = json.load(open(prefs_file)) if prefs_file.exists() else {}
+            prefs.setdefault("bookmark_bar", {})["show_on_all_tabs"] = True
+            json.dump(prefs, open(prefs_file, 'w'), indent=2)
+            logger.info(f"Enabled bookmarks bar visibility for profile '{profile_name}'")
+        except Exception as e:
+            logger.warning(f"Could not update Preferences: {e}")
         
-        # Now add the bookmark
+        # Add bookmark
         bookmarks_file = profile_dir / "Bookmarks"
-        
-        # Default bookmarks structure for new profiles
-        bookmarks = {
-            "checksum": "",
-            "roots": {
-                "bookmark_bar": {
-                    "children": [
-                        {
-                            "date_added": "13367051200000000",
-                            "id": "1",
-                            "name": f"Profile: {profile_name}",
-                            "type": "url",
-                            "url": "chrome://version/"
-                        }
-                    ],
-                    "date_added": "13367051200000000",
-                    "date_modified": "13367051200000000",
-                    "id": "1",
-                    "name": "Bookmarks bar",
-                    "type": "folder"
-                },
-                "other": {
-                    "children": [],
-                    "date_added": "13367051200000000",
-                    "date_modified": "0",
-                    "id": "2",
-                    "name": "Other bookmarks",
-                    "type": "folder"
-                },
-                "synced": {
-                    "children": [],
-                    "date_added": "13367051200000000",
-                    "date_modified": "0",
-                    "id": "3",
-                    "name": "Mobile bookmarks",
-                    "type": "folder"
-                }
-            },
-            "version": 1
+        profile_bookmark = {
+            "date_added": "13367051200000000",
+            "id": "1",
+            "name": f"Profile: {profile_name}",
+            "type": "url",
+            "url": "chrome://version/"
         }
         
-        # If bookmarks file exists, read it and add our bookmark
         if bookmarks_file.exists():
-            with open(bookmarks_file, 'r') as f:
-                bookmarks = json.load(f)
-            
-            # Check if our bookmark already exists
-            bookmark_bar = bookmarks.get("roots", {}).get("bookmark_bar", {}).get("children", [])
-            profile_bookmark_exists = any(
-                child.get("name", "").startswith("Profile:") 
-                for child in bookmark_bar
-            )
-            
-            if not profile_bookmark_exists:
-                # Add our profile bookmark at the beginning
-                new_bookmark = {
-                    "date_added": "13367051200000000",
-                    "id": str(len(bookmark_bar) + 100),  # Ensure unique ID
-                    "name": f"Profile: {profile_name}",
-                    "type": "url",
-                    "url": "chrome://version/"
-                }
-                bookmarks["roots"]["bookmark_bar"]["children"].insert(0, new_bookmark)
+            bookmarks = json.load(open(bookmarks_file))
+            children = bookmarks.get("roots", {}).get("bookmark_bar", {}).get("children", [])
+            if not any(c.get("name", "").startswith("Profile:") for c in children):
+                profile_bookmark["id"] = str(len(children) + 100)
+                children.insert(0, profile_bookmark)
+        else:
+            # Minimal structure
+            bookmarks = {
+                "checksum": "",
+                "roots": {
+                    "bookmark_bar": {
+                        "children": [profile_bookmark],
+                        "date_added": "13367051200000000",
+                        "date_modified": "13367051200000000",
+                        "id": "1",
+                        "name": "Bookmarks bar",
+                        "type": "folder"
+                    },
+                    "other": {"children": [], "date_added": "13367051200000000", "date_modified": "0", "id": "2", "name": "Other bookmarks", "type": "folder"},
+                    "synced": {"children": [], "date_added": "13367051200000000", "date_modified": "0", "id": "3", "name": "Mobile bookmarks", "type": "folder"}
+                },
+                "version": 1
+            }
         
-        # Write bookmarks file
-        with open(bookmarks_file, 'w') as f:
-            json.dump(bookmarks, f, indent=2)
-        
+        json.dump(bookmarks, open(bookmarks_file, 'w'), indent=2)
         logger.info(f"Added profile bookmark for '{profile_name}'")
         return True
-        
     except Exception as e:
         logger.warning(f"Could not add profile bookmark: {e}")
         return False
 
 
 def sanitize_profile_name(profile_name):
-    """
-    Sanitize a profile name to be safe for use as a directory name.
-    Adds "Profile_" prefix to keep directories organized.
-    
-    Args:
-        profile_name: The friendly name of the profile (e.g., "Work & Personal")
-    
-    Returns:
-        Sanitized name with prefix (e.g., "Profile_Work_Personal")
-    """
+    """Sanitize profile name for directory use."""
     if not profile_name:
         return "Default"
-    
-    # Replace any non-alphanumeric characters (except dash and underscore) with underscore
     safe_name = re.sub(r'[^\w\-]', '_', profile_name)
-    
-    # Remove leading/trailing underscores and collapse multiple underscores
     safe_name = re.sub(r'_+', '_', safe_name).strip('_')
-    
-    # Add Profile_ prefix for organization
     return f"Profile_{safe_name}" if safe_name else "Default"
 
 
 def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
-    """
-    Launch the browser with the given URL or --app=URL argument.
-    If CREATE_MISSING_PROFILES is True, will automatically create profiles by using
-    the profile name as the directory name.
-    
-    Args:
-        browser: Path to the browser executable
-        url_arg: URL or --app=URL to open
-        chromium_profile: Optional profile name for Chromium-based browsers
-        extra_args: Additional arguments to pass to the browser
-    """
+    """Launch browser with URL and optional profile."""
     try:
         cmd = [browser]
         
-        # Check if it's a Chromium-based browser
-        chromium_browsers = ['chromium', 'chrome', 'google-chrome', 'brave', 'edge', 'vivaldi']
-        is_chromium_based = any(cb in browser.lower() for cb in chromium_browsers)
-        
-        # Add profile argument for Chromium-based browsers if specified
+        # Check if Chromium-based
+        is_chromium_based = any(cb in browser.lower() for cb in 
+            ['chromium', 'chrome', 'google-chrome', 'brave', 'edge', 'vivaldi'])
         if chromium_profile and is_chromium_based:
             if CREATE_MISSING_PROFILES:
-                # Simple approach: use sanitized profile name as directory name
                 profile_dir = sanitize_profile_name(chromium_profile)
-                logger.info(f"Using profile directory: {profile_dir} (auto-create enabled)")
+                logger.info(f"Using profile: {profile_dir}")
                 cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
                 
-                # Add profile bookmark if enabled and profile is being created
                 if ADD_PROFILE_BOOKMARK:
-                    # Get the browser config directory
+                    # Get browser config dir
                     browser_name = os.path.basename(browser).lower()
-                    if 'chromium' in browser_name:
-                        config_dir = Path.home() / '.config' / 'chromium'
-                    elif 'chrome' in browser_name:
-                        config_dir = Path.home() / '.config' / 'google-chrome'
-                    elif 'brave' in browser_name:
-                        config_dir = Path.home() / '.config' / 'BraveSoftware' / 'Brave-Browser'
-                    else:
-                        config_dir = Path.home() / '.config' / 'chromium'  # fallback
-                    
+                    config_dir = (
+                        Path.home() / '.config' / 'google-chrome' if 'chrome' in browser_name else
+                        Path.home() / '.config' / 'BraveSoftware' / 'Brave-Browser' if 'brave' in browser_name else
+                        Path.home() / '.config' / 'chromium'
+                    )
                     profile_path = config_dir / profile_dir
                     
-                    # Always try to add bookmark
-                    # For new profiles, Chrome needs time to create the directory
                     if not profile_path.exists():
-                        # Profile doesn't exist yet, Chrome will create it
-                        # Schedule bookmark creation after a delay
-                        import threading
+                        # Delayed bookmark for new profiles
+                        import threading, time
                         def add_bookmark_later():
-                            import time
-                            max_attempts = 10
-                            for attempt in range(max_attempts):
-                                time.sleep(2)  # Wait for Chrome to create the profile
+                            for _ in range(10):
+                                time.sleep(2)
                                 if profile_path.exists():
-                                    logger.info(f"Profile directory created, adding bookmark for '{chromium_profile}'")
                                     add_profile_bookmark(profile_path, chromium_profile)
                                     break
-                                elif attempt == max_attempts - 1:
-                                    logger.warning(f"Profile directory not created after {max_attempts * 2} seconds")
-                        
-                        thread = threading.Thread(target=add_bookmark_later, daemon=True)
-                        thread.start()
-                        logger.info(f"Scheduled bookmark creation for new profile '{chromium_profile}'")
+                        threading.Thread(target=add_bookmark_later, daemon=True).start()
+                        logger.info(f"Scheduled bookmark for '{chromium_profile}'")
                     else:
-                        # Profile exists, add bookmark if needed
-                        # Always call add_profile_bookmark - it checks internally if bookmark exists
                         add_profile_bookmark(profile_path, chromium_profile)
             else:
-                # Legacy behavior: look up profile in LocalState
-                # This requires manual profile creation in Chrome
-                logger.warning("CREATE_MISSING_PROFILES is disabled - using legacy profile lookup")
-                error_msg = f"Error: Profile '{chromium_profile}' requires manual creation in browser"
-                logger.error(error_msg)
-                send_error_notification(error_msg)
-                # Don't add profile arguments - let it use default
+                logger.error(f"Profile '{chromium_profile}' requires manual creation")
+                send_error_notification(f"Profile '{chromium_profile}' not found")
         
-        # Add any extra arguments
         if extra_args:
             cmd.extend(extra_args)
+        if url_arg:
+            cmd.append(url_arg)
         
-        # Add the URL or --app=URL argument
-        cmd.append(url_arg)
-        
-        logger.info(f"Running command: {' '.join(cmd)}")
+        logger.info(f"Running: {' '.join(cmd)}")
         subprocess.Popen(cmd)
     except FileNotFoundError:
         error_msg = f"Error: Browser not found: {browser}"
