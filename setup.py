@@ -16,7 +16,7 @@ setup(
     name="shepherd-browser-router",
     version=__version__,
     author="shepherd.py contributors",
-    description="A smart URL router that guides web links to the right browser profile",
+    description="A smart URL router for Chromium/Chrome/Brave browser profiles",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/d1rewolf/shepherd",
@@ -51,7 +51,7 @@ setup(
             "flake8",
         ],
     },
-    keywords="browser, url, router, profile, chromium, chrome",
+    keywords="browser, url, router, profile, chromium, chrome, brave",
     project_urls={
         "Bug Tracker": "https://github.com/d1rewolf/shepherd/issues",
         "Source": "https://github.com/d1rewolf/shepherd",

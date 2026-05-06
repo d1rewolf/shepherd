@@ -110,22 +110,17 @@ This way:
 
 ## Configuration
 
-Shepherd.py stores its configuration in `~/.config/shepherd/config.py`. On first run, it will create an example configuration file for you.
+Shepherd.py stores its configuration in `~/.config/shepherd/config.py`.
 
 ### Quick Setup
 
-1. Run shepherd.py once to create the config directory:
+1. Create the config directory and copy the example config:
 ```bash
-./shepherd.py https://example.com
+mkdir -p ~/.config/shepherd/
+cp config.example.py ~/.config/shepherd/config.py
 ```
 
-2. Copy the example config to create your own:
-```bash
-cd ~/.config/shepherd/
-cp config.example.py config.py
-```
-
-3. Edit `~/.config/shepherd/config.py` with your rules:
+2. Edit `~/.config/shepherd/config.py` with your rules:
 
 ```python
 # Browser rules: regex pattern -> (browser_path, profile_name) or just browser_path
@@ -150,6 +145,9 @@ DEFAULT_BROWSER = "/usr/bin/chromium"
 
 # Or with a default profile:
 # DEFAULT_BROWSER = ("/usr/bin/chromium", "Personal")
+
+# Flatpak browsers are also supported:
+# DEFAULT_BROWSER = "flatpak run com.brave.Browser"
 
 # Enable desktop notifications (optional)
 ENABLE_INFO_NOTIFICATIONS = True  # Show profile routing notifications
@@ -201,6 +199,12 @@ shepherd.py --app=https://slack.com
 
 # Pass additional browser arguments
 shepherd.py https://example.com --incognito
+
+# Create a browser profile and exit (uses DEFAULT_BROWSER)
+shepherd.py --create-profile=Work
+
+# Show help
+shepherd.py --help
 ```
 
 ### As System Default
@@ -209,13 +213,14 @@ Once set as the default browser, clicking links in any application will automati
 
 ## Supported Browsers
 
-shepherd.py automatically detects and supports profile switching for:
-- Chromium
-- Google Chrome
-- Brave
-- Microsoft Edge
-- Vivaldi
-- Opera
+shepherd.py supports profile switching for:
+- **Chromium** - Full support with automatic profile creation
+- **Google Chrome** - Full support with automatic profile creation
+- **Brave Browser** - Full support with automatic profile creation
+
+Native and Flatpak installations are both supported. For Flatpak browsers, use the full launch command as the browser path (e.g. `"flatpak run com.brave.Browser"`); shepherd will resolve profiles under `~/.var/app/<id>/config/`.
+
+Other Chromium-based browsers (Edge, Vivaldi, Opera) are not currently supported.
 
 ## How It Works
 

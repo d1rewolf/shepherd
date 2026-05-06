@@ -80,56 +80,6 @@ def load_config():
         except Exception as e:
             print(f"Error loading config from {config_file}: {e}", file=sys.stderr)
             print("Using default configuration", file=sys.stderr)
-    else:
-        # Create config directory and example config if it doesn't exist
-        if not config_dir.exists():
-            config_dir.mkdir(parents=True, exist_ok=True)
-            print(f"Created config directory: {config_dir}", file=sys.stderr)
-            
-            # Create example config
-            example_config = config_dir / "config.example.py"
-            if not example_config.exists():
-                example_content = r'''"""
-Shepherd configuration file
-Rename this to config.py and customize for your needs
-"""
-
-# Browser rules: regex pattern -> (browser_path, profile_name) or just browser_path
-# First matching pattern wins
-BROWSER_RULES = {
-    # Work profiles
-    r"^https://.*\.slack\.com": ("/usr/bin/chromium", "Work"),
-    
-    # Personal browsing
-    r"^https://mail\.google\.com": ("/usr/bin/chromium", "Personal"),
-    
-    # Banking - use separate profile for security
-    r"^https://.*\.chase\.com": ("/usr/bin/chromium", "Banking"),
-}
-
-# Default browser for unmatched URLs
-DEFAULT_BROWSER = "/usr/bin/chromium"
-
-# Notification settings (optional)
-ENABLE_INFO_NOTIFICATIONS = False  # Set to True to show profile routing notifications
-ENABLE_ERROR_NOTIFICATIONS = False  # Set to True to show error notifications
-NOTIFICATION_COMMAND = ['notify-send', 'Shepherd', '{message}', '-i', 'dialog-warning']
-
-# Logging configuration
-# Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-LOG_LEVEL = "INFO"
-
-# Automatically create browser profiles if they don't exist
-# When enabled, shepherd will use the profile name as the directory name
-CREATE_MISSING_PROFILES = False
-
-# Add a bookmark to the bookmarks bar showing the profile name
-# Helps users identify which profile they're currently using
-ADD_PROFILE_BOOKMARK = False
-'''
-                example_config.write_text(example_content)
-                print(f"Created example config: {example_config}", file=sys.stderr)
-                print(f"Copy {example_config} to {config_file} and customize it", file=sys.stderr)
     
     return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level, default_create_missing_profiles, default_add_profile_bookmark
 
@@ -173,8 +123,7 @@ def add_profile_bookmark(profile_dir, profile_name):
             logger.info(f"Enabled bookmarks bar visibility for profile '{profile_name}'")
         except Exception as e:
             logger.warning(f"Could not update Preferences: {e}")
-        
-        # Add bookmark
+
         bookmarks_file = profile_dir / "Bookmarks"
         profile_bookmark = {
             "date_added": "13367051200000000",
@@ -229,30 +178,30 @@ def sanitize_profile_name(profile_name):
 def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
     """Launch browser with URL and optional profile."""
     try:
-        cmd = [browser]
-        
-        # Check if Chromium-based
-        is_chromium_based = any(cb in browser.lower() for cb in 
-            ['chromium', 'chrome', 'google-chrome', 'brave', 'edge', 'vivaldi'])
-        if chromium_profile and is_chromium_based:
+        # Handle flatpak commands (e.g., "flatpak run com.brave.Browser")
+        if browser.startswith('flatpak '):
+            cmd = browser.split()
+        else:
+            cmd = [browser]
+
+        # Check if supported browser
+        browser_lower = browser.lower()
+        is_supported = any(cb in browser_lower for cb in
+            ['chromium', 'chrome', 'google-chrome', 'brave'])
+
+        if chromium_profile and is_supported:
             if CREATE_MISSING_PROFILES:
                 profile_dir = sanitize_profile_name(chromium_profile)
                 logger.info(f"Using profile: {profile_dir}")
                 cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
                 
                 if ADD_PROFILE_BOOKMARK:
-                    # Get browser config dir
-                    browser_name = os.path.basename(browser).lower()
-                    config_dir = (
-                        Path.home() / '.config' / 'google-chrome' if 'chrome' in browser_name else
-                        Path.home() / '.config' / 'BraveSoftware' / 'Brave-Browser' if 'brave' in browser_name else
-                        Path.home() / '.config' / 'chromium'
-                    )
+                    config_dir = get_browser_config_dir(browser)
                     profile_path = config_dir / profile_dir
-                    
+
                     # Pre-create directory if needed (Chrome will initialize it)
                     profile_path.mkdir(parents=True, exist_ok=True)
-                    
+
                     # Add bookmark immediately
                     add_profile_bookmark(profile_path, chromium_profile)
             else:
@@ -270,10 +219,87 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
         error_msg = f"Error: Browser not found: {browser}"
         print(f"{error_msg}", file=sys.stderr)
         send_error_notification(error_msg)
-        subprocess.Popen([DEFAULT_BROWSER, url_arg])
+        fallback = DEFAULT_BROWSER[0] if isinstance(DEFAULT_BROWSER, tuple) else DEFAULT_BROWSER
+        if fallback.startswith('flatpak '):
+            subprocess.Popen(fallback.split() + [url_arg])
+        else:
+            subprocess.Popen([fallback, url_arg])
+
+
+def get_browser_config_dir(browser):
+    """Get the browser config directory for a given browser path."""
+    browser_lower = browser.lower()
+    if browser.startswith('flatpak '):
+        app_id = browser.split()[-1]
+        flatpak_base = Path.home() / '.var' / 'app' / app_id / 'config'
+        if 'chrome' in browser_lower:
+            return flatpak_base / 'google-chrome'
+        elif 'brave' in browser_lower:
+            return flatpak_base / 'BraveSoftware' / 'Brave-Browser'
+        else:
+            return flatpak_base / 'chromium'
+    else:
+        browser_name = os.path.basename(browser).lower()
+        if 'chrome' in browser_name:
+            return Path.home() / '.config' / 'google-chrome'
+        elif 'brave' in browser_name:
+            return Path.home() / '.config' / 'BraveSoftware' / 'Brave-Browser'
+        else:
+            return Path.home() / '.config' / 'chromium'
+
+
+def create_profile(profile_name):
+    """Create a browser profile and exit."""
+    browser = DEFAULT_BROWSER[0] if isinstance(DEFAULT_BROWSER, tuple) else DEFAULT_BROWSER
+
+    profile_dir = sanitize_profile_name(profile_name)
+    config_dir = get_browser_config_dir(browser)
+    profile_path = config_dir / profile_dir
+
+    if profile_path.exists():
+        logger.info(f"Profile already exists: {profile_path}")
+        print(f"Profile already exists: {profile_path}")
+        return
+
+    profile_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Created profile directory: {profile_path}")
+    print(f"Created profile: {profile_dir} at {profile_path}")
+
+    if ADD_PROFILE_BOOKMARK:
+        add_profile_bookmark(profile_path, profile_name)
+
+
+def print_help():
+    """Print usage information."""
+    print(f"shepherd {__version__} - Smart URL router for browser profiles")
+    print()
+    print("Usage: shepherd [options] [URL]")
+    print()
+    print("Options:")
+    print("  --create-profile=NAME  Create a new browser profile and exit")
+    print("  --app=URL              Open URL in app mode")
+    print("  --help                 Show this help message")
+    print()
+    print("Any other arguments are passed through to the browser.")
 
 
 def main():
+    # Handle --help and --create-profile flags
+    for arg in sys.argv[1:]:
+        if arg in ('--help', '-h'):
+            print_help()
+            return
+        if arg.startswith('--create-profile='):
+            profile_name = arg.split('=', 1)[1]
+            if not profile_name:
+                print("Error: --create-profile requires a profile name", file=sys.stderr)
+                sys.exit(1)
+            create_profile(profile_name)
+            return
+        elif arg == '--create-profile':
+            print("Error: --create-profile requires a value (e.g., --create-profile=MyProfile)", file=sys.stderr)
+            sys.exit(1)
+
     # Allow launching without URL
     if len(sys.argv) < 2:
         logger.info("Launching browser without URL...")
@@ -282,7 +308,10 @@ def main():
             browser, profile = DEFAULT_BROWSER
             open_with_browser(browser, "", chromium_profile=profile)
         else:
-            subprocess.Popen([DEFAULT_BROWSER])
+            if DEFAULT_BROWSER.startswith('flatpak '):
+                subprocess.Popen(DEFAULT_BROWSER.split())
+            else:
+                subprocess.Popen([DEFAULT_BROWSER])
         return
 
     first_arg = sys.argv[1]
