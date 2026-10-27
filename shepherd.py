@@ -53,6 +53,7 @@ def load_config():
     default_log_level = "INFO"
     default_create_missing_profiles = False
     default_add_profile_bookmark = False
+    default_new_window = False
     
     if config_file.exists():
         try:
@@ -75,17 +76,18 @@ def load_config():
             log_level = getattr(config, 'LOG_LEVEL', default_log_level)
             create_missing_profiles = getattr(config, 'CREATE_MISSING_PROFILES', default_create_missing_profiles)
             add_profile_bookmark = getattr(config, 'ADD_PROFILE_BOOKMARK', default_add_profile_bookmark)
+            new_window = getattr(config, 'NEW_WINDOW', default_new_window)
             
-            return browser_rules, default_browser, enable_info_notifications, enable_error_notifications, notification_command, log_level, create_missing_profiles, add_profile_bookmark
+            return browser_rules, default_browser, enable_info_notifications, enable_error_notifications, notification_command, log_level, create_missing_profiles, add_profile_bookmark, new_window
         except Exception as e:
             print(f"Error loading config from {config_file}: {e}", file=sys.stderr)
             print("Using default configuration", file=sys.stderr)
     
-    return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level, default_create_missing_profiles, default_add_profile_bookmark
+    return default_rules, default_browser, default_enable_info_notifications, default_enable_error_notifications, default_notification_command, default_log_level, default_create_missing_profiles, default_add_profile_bookmark, default_new_window
 
 
 # Load configuration
-BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL, CREATE_MISSING_PROFILES, ADD_PROFILE_BOOKMARK = load_config()
+BROWSER_RULES, DEFAULT_BROWSER, ENABLE_INFO_NOTIFICATIONS, ENABLE_ERROR_NOTIFICATIONS, NOTIFICATION_COMMAND, LOG_LEVEL, CREATE_MISSING_PROFILES, ADD_PROFILE_BOOKMARK, NEW_WINDOW = load_config()
 
 # Initialize logging with configured log level
 logger = setup_logging(LOG_LEVEL)
@@ -193,7 +195,11 @@ def open_with_browser(browser, url_arg, chromium_profile=None, extra_args=None):
             if CREATE_MISSING_PROFILES:
                 profile_dir = sanitize_profile_name(chromium_profile)
                 logger.info(f"Using profile: {profile_dir}")
-                cmd.extend([f'--profile-directory={profile_dir}', '--new-window'])
+                cmd.append(f'--profile-directory={profile_dir}')
+                # Without --new-window the URL opens as a tab in the
+                # profile's last window (or a new window if it has none).
+                if NEW_WINDOW:
+                    cmd.append('--new-window')
                 
                 if ADD_PROFILE_BOOKMARK:
                     config_dir = get_browser_config_dir(browser)

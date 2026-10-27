@@ -165,6 +165,10 @@ Both rules and DEFAULT_BROWSER can be either:
 - **Simple string**: Just the browser path
 - **Tuple**: `(browser_path, profile_name)` for profile-specific routing
 
+### Window Behaviour
+
+- **NEW_WINDOW**: `False` (default) opens a URL as a new tab in its profile's most recent window, or a new window if that profile has none open. Set to `True` to always open a new window.
+
 ### Notification Settings
 
 shepherd.py can send desktop notifications to keep you informed about routing decisions:

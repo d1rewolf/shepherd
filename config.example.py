@@ -28,6 +28,10 @@ DEFAULT_BROWSER = "/usr/bin/chromium"
 # Or with a specific profile for unmatched URLs:
 # DEFAULT_BROWSER = ("/usr/bin/chromium", "Personal")
 
+# Open each URL in a new window instead of a new tab in the profile's
+# existing window (a profile with no open window always gets a new one)
+NEW_WINDOW = False
+
 # Notification settings (optional)
 # Set to True to get desktop notifications when profiles or browsers aren't found
 ENABLE_NOTIFICATIONS = False

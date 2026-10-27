@@ -110,7 +110,7 @@ def test_config_loading():
     # Should not crash even without config
     try:
         config = load_config()
-        assert len(config) == 8, f"Expected 8 config values, got {len(config)}"
+        assert len(config) == 9, f"Expected 9 config values, got {len(config)}"
         print("✓ Config loading test passed")
     except Exception as e:
         print(f"✗ Config loading failed: {e}")
