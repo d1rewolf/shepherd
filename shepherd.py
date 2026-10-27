@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -E
 """
 shepherd.py - Smart URL router for browser profiles
 https://github.com/d1rewolf/shepherd
