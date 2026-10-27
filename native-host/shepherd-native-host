@@ -1,0 +1,99 @@
+#!/usr/bin/env -S python3 -I
+"""
+Chromium native messaging host for the Shepherd browser extension.
+
+Reads one length-prefixed JSON message {"url": "..."} on stdin, launches
+shepherd with that URL, and replies {"ok": true} or {"ok": false, "error": ...}.
+"""
+
+import json
+import os
+import shutil
+import struct
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlsplit
+
+MAX_MESSAGE = 1024 * 1024  # Chromium caps extension->host messages at 1MB
+ALLOWED_SCHEMES = {"http", "https"}
+
+
+def log(message):
+    state = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    log_dir = state / "shepherd"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    with open(log_dir / "native-host.log", "a") as f:
+        f.write(f"{datetime.now().isoformat(timespec='seconds')} {message}\n")
+
+
+def read_message(stream):
+    header = stream.read(4)
+    if len(header) != 4:
+        return None
+    (length,) = struct.unpack("=I", header)
+    if length > MAX_MESSAGE:
+        raise ValueError(f"message too large: {length} bytes")
+    return json.loads(stream.read(length))
+
+
+def write_message(stream, payload):
+    data = json.dumps(payload).encode()
+    stream.write(struct.pack("=I", len(data)))
+    stream.write(data)
+    stream.flush()
+
+
+def find_shepherd():
+    """SHEPHERD_BIN, then the repo checkout this host lives in, then PATH."""
+    if os.environ.get("SHEPHERD_BIN"):
+        return os.environ["SHEPHERD_BIN"]
+    sibling = Path(__file__).resolve().parent.parent / "shepherd.py"
+    if sibling.exists():
+        return str(sibling)
+    return shutil.which("shepherd") or shutil.which("shepherd.py")
+
+
+def validate_url(url):
+    if not isinstance(url, str) or not url:
+        raise ValueError("missing url")
+    # urlsplit never yields a scheme for "--flag", so this also blocks
+    # anything shepherd or the browser would parse as an option.
+    if urlsplit(url).scheme.lower() not in ALLOWED_SCHEMES:
+        raise ValueError(f"refusing non-http(s) URL: {url[:200]}")
+    if any(c in url for c in "\0\n\r"):
+        raise ValueError("control characters in URL")
+    return url
+
+
+def handle(message):
+    url = validate_url((message or {}).get("url"))
+    shepherd = find_shepherd()
+    if not shepherd:
+        raise FileNotFoundError("shepherd not found (set SHEPHERD_BIN)")
+    # stdout is the messaging pipe back to Chromium, so the child must not
+    # inherit it; new session so it outlives this host.
+    subprocess.Popen(
+        [shepherd, url],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    log(f"routed {url}")
+    return {"ok": True}
+
+
+def main():
+    stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
+    try:
+        reply = handle(read_message(stdin))
+    except Exception as e:
+        log(f"error: {e}")
+        reply = {"ok": False, "error": str(e)}
+    write_message(stdout, reply)
+
+
+if __name__ == "__main__":
+    main()

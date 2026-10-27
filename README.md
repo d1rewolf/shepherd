@@ -211,6 +211,29 @@ shepherd.py --help
 
 Once set as the default browser, clicking links in any application will automatically route through shepherd.py.
 
+### From Inside the Browser
+
+Links clicked inside Chromium never reach the default-browser handler: the browser navigates the tab itself. The bundled extension hands them to shepherd on request:
+
+- **Alt-click** a link
+- **Right-click** a link → *Open link with Shepherd*, or a page → *Open page with Shepherd*
+- Click the toolbar button to send the current page
+
+The extension never reroutes ordinary clicks. You decide which links to send, so it doesn't need to know which profile it's running in and can't bounce a link between profiles.
+
+Setup:
+
+```bash
+# Register the native messaging host (Chromium, Chrome and Brave config dirs that exist)
+native-host/install.sh
+```
+
+Then load `browser-extension/` as an unpacked extension (`chrome://extensions` → Developer mode → Load unpacked). To load it into **every** Chromium profile at once, add it to `--load-extension` in `~/.config/chromium-flags.conf`. If that line already lists other extensions, separate the paths with commas; a second `--load-extension` line replaces the first.
+
+The extension sends the URL to `native-host/shepherd-native-host`. That host accepts only `http`/`https` URLs, so a page can't slip a browser flag through. It then runs `shepherd.py` from the same checkout, or `$SHEPHERD_BIN` if that's set. Each routed URL is logged to `~/.local/state/shepherd/native-host.log`.
+
+The extension is an independent clean-room implementation of the "send this link to my URL router" idea popularised by Finicky on macOS. No Finicky code was referenced.
+
 ## Supported Browsers
 
 shepherd.py supports profile switching for:
